@@ -3,7 +3,13 @@ import { ArrowUpRight, Play, Pause } from "lucide-react";
 import { createGame, legal, play, type Mode } from "../core/game";
 import { search } from "../ai/search";
 import { Board } from "../components/Board";
-export function Home({ go }: { go: (p: string) => void }) {
+export function Home({
+  go,
+  onWatch,
+}: {
+  go: (p: string) => void;
+  onWatch: () => void;
+}) {
   const [mode, setMode] = useState<Mode>("classic"),
     [g, setG] = useState(() => createGame()),
     [paused, setPaused] = useState(false),
@@ -34,12 +40,18 @@ export function Home({ go }: { go: (p: string) => void }) {
   return (
     <div className="home">
       <div className="hero-copy">
-        <h2>
-          TicTacToe<span>AI</span>
-        </h2>
+        <div className="hero-title">
+          <h2>
+            TicTacToe<span>AI</span>
+          </h2>
+          <p className="hero-subtitle">틱택토 인공지능</p>
+        </div>
         <div className="hero-actions">
           <button className="primary" onClick={() => go("play")}>
             대국 시작하기 <ArrowUpRight size={17} />
+          </button>
+          <button onClick={onWatch}>
+            AI 대국 관전하기 <Play size={17} />
           </button>
         </div>
       </div>

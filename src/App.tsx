@@ -24,6 +24,7 @@ export default function App() {
   const [page, setPage] = useState<Page>("home"),
     [collapsed, setCollapsed] = useState(() => read("nav", false)),
     [open, setOpen] = useState(false),
+    [watchRequest, setWatchRequest] = useState(0),
     [models, setModels] = useState<Model[]>(() => {
       try {
         return read<Model[]>("models", []).map(validateModel);
@@ -183,7 +184,15 @@ export default function App() {
         </header>
         <main id="content">
           <div hidden={page !== "home"}>
-            {page === "home" && <Home go={go} />}
+            {page === "home" && (
+              <Home
+                go={go}
+                onWatch={() => {
+                  setWatchRequest((n) => n + 1);
+                  go("arena");
+                }}
+              />
+            )}
           </div>
           <div hidden={page !== "play"}>
             <Playroom
@@ -194,7 +203,12 @@ export default function App() {
             />
           </div>
           <div hidden={page !== "arena"}>
-            <Arena q={q} onRecord={record} modelSelection={modelSelection} />
+            <Arena
+              q={q}
+              onRecord={record}
+              modelSelection={modelSelection}
+              watchRequest={watchRequest}
+            />
           </div>
         </main>
         {storageError && (

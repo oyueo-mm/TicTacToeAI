@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createGame, play, replay, type Game, type Mode } from "../core/game";
 import {
   algorithms,
@@ -22,10 +22,12 @@ export function Arena({
   q,
   onRecord,
   modelSelection,
+  watchRequest = 0,
 }: {
   q: QTable;
   onRecord: (r: RecordGame) => void;
   modelSelection: ModelSelection;
+  watchRequest?: number;
 }) {
   const [mode, setMode] = useState<Mode>("classic"),
     [a, setA] = useState<Algorithm>("alphabeta"),
@@ -42,6 +44,25 @@ export function Arena({
     [filter, setFilter] = useState("all"),
     [error, setError] = useState("");
   const aMark = alternate && results.length % 2 ? "O" : "X";
+  const cancelCurrentRun = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!watchRequest) return;
+    cancelCurrentRun.current();
+    setMode("classic");
+    setA("alphabeta");
+    setB("minimax");
+    setCount(10);
+    setAlternate(true);
+    setFast(false);
+    setGame(createGame());
+    setResults([]);
+    setSearches([]);
+    setView(null);
+    setCursor(0);
+    setFilter("all");
+    setError("");
+    setRunning(true);
+  }, [watchRequest]);
   useEffect(() => {
     if (!running) return;
     if (results.length >= count) {
@@ -90,10 +111,12 @@ export function Arena({
       },
       fast ? 0 : 400,
     );
-    return () => {
+    const cancel = () => {
       clearTimeout(timer);
       controller.abort();
     };
+    cancelCurrentRun.current = cancel;
+    return cancel;
   }, [running, game, results.length, count, a, b, mode, alternate, fast, q]);
   const wins = results.filter((r) => r.result === r.aMark).length,
     draws = results.filter((r) => r.result === "draw").length;
@@ -125,11 +148,17 @@ export function Arena({
           ).map(([label, value, set]) => (
             <Select
               key={label}
-              disabled={running || game.history.length > 0}
+              disabled={running}
               label={label}
               value={value}
               options={algorithms(mode).map((v) => [v, names[v]])}
-              onChange={(v) => set(v as Algorithm)}
+              onChange={(v) => {
+                set(v as Algorithm);
+                setGame(createGame(mode));
+                setResults([]);
+                setSearches([]);
+                setView(null);
+              }}
             />
           ))}
           {(a === "q" || b === "q") && <ModelPicker {...modelSelection} />}

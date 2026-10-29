@@ -23,6 +23,78 @@ async function noOverflow(p: Page) {
   ).toBe(true);
 }
 
+test("홈 부제목·관전 버튼 배치와 자동 Arena·설정 변경·재진입", async ({
+  page,
+}) => {
+  await page.goto("");
+  const title = page.locator(".hero-copy h2"),
+    subtitle = page.getByText("틱택토 인공지능", { exact: true }),
+    start = page.getByRole("button", { name: "대국 시작하기", exact: true }),
+    watch = page.getByRole("button", { name: "AI 대국 관전하기", exact: true });
+  const h = (await title.boundingBox())!,
+    s = (await subtitle.boundingBox())!,
+    a = (await start.boundingBox())!,
+    b = (await watch.boundingBox())!;
+  expect(s.x).toBeCloseTo(h.x, 0);
+  expect(s.y).toBeGreaterThanOrEqual(h.y + h.height);
+  expect(s.y + s.height).toBeLessThan(a.y);
+  expect(b.x).toBeCloseTo(a.x, 0);
+  expect(b.y).toBeGreaterThanOrEqual(a.y + a.height + 8);
+  expect(
+    await subtitle.evaluate((e) => parseFloat(getComputedStyle(e).fontSize)),
+  ).toBeLessThan(
+    await title.evaluate((e) => parseFloat(getComputedStyle(e).fontSize)),
+  );
+  await noOverflow(page);
+  await page.screenshot({
+    path: `test-results/home-watch-${test.info().project.name}.png`,
+    fullPage: true,
+  });
+  await watch.click();
+  const arena = page.locator(".lab-layout:visible");
+  await expect(
+    page.getByRole("button", {
+      name: "AI Arena",
+      exact: true,
+      includeHidden: true,
+    }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(arena.getByLabel("AI A", { exact: true })).toHaveValue(
+    "alphabeta",
+  );
+  await expect(arena.getByLabel("AI B", { exact: true })).toHaveValue(
+    "minimax",
+  );
+  await expect(arena.locator(".game-stage .status")).toHaveText("대국 진행 중");
+  await expect(arena.locator(".board .mark").first()).toBeVisible();
+  await arena.getByRole("button", { name: "일시정지", exact: true }).click();
+  await arena.getByLabel("AI A", { exact: true }).selectOption("random");
+  await arena.getByLabel("AI B", { exact: true }).selectOption("rule");
+  await arena.getByLabel("대국 횟수", { exact: true }).fill("1");
+  await arena.getByLabel("고속 대국", { exact: true }).check();
+  await arena.getByRole("button", { name: "연속 대국", exact: true }).click();
+  await expect(arena.locator(".history button")).toHaveCount(1);
+  await expect(arena.getByLabel("AI A", { exact: true })).toHaveValue("random");
+  await go(page, "홈");
+  await page
+    .getByRole("button", { name: "AI 대국 관전하기", exact: true })
+    .click();
+  await expect(arena.getByLabel("AI A", { exact: true })).toHaveValue(
+    "alphabeta",
+  );
+  await expect(arena.getByLabel("AI B", { exact: true })).toHaveValue(
+    "minimax",
+  );
+  await expect(arena.getByLabel("대국 횟수", { exact: true })).toHaveValue(
+    "10",
+  );
+  await expect(
+    arena.getByLabel("고속 대국", { exact: true }),
+  ).not.toBeChecked();
+  await expect(arena.locator(".board .mark").first()).toBeVisible();
+  await noOverflow(page);
+});
+
 test("간소화한 홈·3개 메뉴·제목·자동 대국 및 내비게이션", async ({
   page,
   isMobile,

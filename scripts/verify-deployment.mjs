@@ -82,13 +82,11 @@ try {
         },
         q: { "---------": { 4: 1 } },
       };
-      await play
-        .getByLabel("Q-learning 모델 JSON 불러오기")
-        .setInputFiles({
-          name: "model.json",
-          mimeType: "application/json",
-          buffer: Buffer.from(JSON.stringify(model)),
-        });
+      await play.getByLabel("Q-learning 모델 JSON 불러오기").setInputFiles({
+        name: "model.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(model)),
+      });
       await play.getByLabel("나의 차례", { exact: true }).selectOption("O");
       await expect(
         board.getByRole("button", { name: "5번 칸 X", exact: true }),
@@ -107,6 +105,25 @@ try {
     await expect(arena.locator(".history")).toContainText("무승부");
     await arena.locator(".history button").click();
     await expect(arena.getByLabel("기록 재생 위치")).toBeVisible();
+    await go(page, "홈");
+    await expect(
+      page.getByText("틱택토 인공지능", { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "AI 대국 관전하기", exact: true })
+      .click();
+    await expect(arena.getByLabel("AI A", { exact: true })).toHaveValue(
+      "alphabeta",
+    );
+    await expect(arena.getByLabel("AI B", { exact: true })).toHaveValue(
+      "minimax",
+    );
+    await expect(arena.locator(".board .mark").first()).toBeVisible();
+    await arena.getByRole("button", { name: "일시정지", exact: true }).click();
+    await arena.getByLabel("AI A", { exact: true }).selectOption("random");
+    await expect(arena.getByLabel("AI A", { exact: true })).toHaveValue(
+      "random",
+    );
     await go(page, "홈");
     expect(
       await page.evaluate(
@@ -127,6 +144,9 @@ try {
       savedMatchRestored: true,
       modelImportAndRestore: !mobile,
       arenaReplay: true,
+      homeSubtitle: true,
+      homeWatchAutostart: true,
+      watchSettingsEditable: true,
       workers: [...new Set(workers)],
       errors,
       badResponses,
