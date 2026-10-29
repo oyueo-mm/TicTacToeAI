@@ -38,8 +38,12 @@ test("홈 부제목·관전 버튼 배치와 자동 Arena·설정 변경·재진
   expect(s.x).toBeCloseTo(h.x, 0);
   expect(s.y).toBeGreaterThanOrEqual(h.y + h.height);
   expect(s.y + s.height).toBeLessThan(a.y);
-  expect(b.x).toBeCloseTo(a.x, 0);
-  expect(b.y).toBeGreaterThanOrEqual(a.y + a.height + 8);
+  expect(b.y).toBeCloseTo(a.y, 0);
+  expect(b.x - a.x - a.width).toBeCloseTo(10, 0);
+  expect(b.height).toBeCloseTo(a.height, 0);
+  expect(
+    await subtitle.evaluate((e) => parseFloat(getComputedStyle(e).fontSize)),
+  ).toBeCloseTo(16.2, 1);
   expect(
     await subtitle.evaluate((e) => parseFloat(getComputedStyle(e).fontSize)),
   ).toBeLessThan(

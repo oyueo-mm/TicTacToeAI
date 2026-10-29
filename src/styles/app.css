@@ -218,8 +218,6 @@ input[type="checkbox"] {
 .hero-copy {
   min-width: 0;
   transform: translateY(-80px);
-  /* Compensate for the second button so the centered title stays in place. */
-  margin-bottom: -54px;
 }
 .home {
   min-height: 100dvh;
@@ -248,21 +246,22 @@ input[type="checkbox"] {
 }
 .hero-subtitle {
   position: absolute;
-  bottom: 7px;
+  bottom: 4px;
   left: 0;
   margin: 0;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 16.2px;
+  line-height: 22px;
   color: #9ca7b5;
 }
 .hero-actions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 .hero-actions button {
+  white-space: nowrap;
   font-size: 12px;
   padding: 12px 17px;
   border-radius: 7px;
@@ -827,9 +826,6 @@ input[type="checkbox"] {
   }
 }
 @media (max-width: 1000px) {
-  .hero-copy {
-    margin-bottom: -50px;
-  }
   .lab-layout {
     grid-template-columns: 180px minmax(230px, 1fr);
   }
