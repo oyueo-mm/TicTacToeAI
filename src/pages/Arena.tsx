@@ -17,12 +17,15 @@ import {
   Status,
 } from "../components/ui";
 import { type RecordGame } from "./Playroom";
+import { ModelPicker, type ModelSelection } from "../components/ModelPicker";
 export function Arena({
   q,
   onRecord,
+  modelSelection,
 }: {
   q: QTable;
   onRecord: (r: RecordGame) => void;
+  modelSelection: ModelSelection;
 }) {
   const [mode, setMode] = useState<Mode>("classic"),
     [a, setA] = useState<Algorithm>("alphabeta"),
@@ -129,6 +132,7 @@ export function Arena({
               onChange={(v) => set(v as Algorithm)}
             />
           ))}
+          {(a === "q" || b === "q") && <ModelPicker {...modelSelection} />}
           <NumberField
             label="대국 횟수"
             disabled={running}

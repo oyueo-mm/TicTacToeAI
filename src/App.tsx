@@ -2,9 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Home as HomeIcon,
   Grid2X2,
-  BrainCircuit,
   Swords,
-  ChartNoAxesCombined,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
@@ -13,20 +11,17 @@ import {
 } from "lucide-react";
 import { Home } from "./pages/Home";
 import { Playroom, type RecordGame } from "./pages/Playroom";
-import { TrainingPage } from "./pages/Training";
 import { Arena } from "./pages/Arena";
-import { Analysis } from "./pages/Analysis";
-import { useTraining } from "./training/useTraining";
+import type { QTable } from "./ai/search";
 import { read, write, validateModel, type Model } from "./storage/models";
 const pages = [
   { id: "home", label: "홈", Icon: HomeIcon },
   { id: "play", label: "대국실", Icon: Grid2X2 },
-  { id: "training", label: "AI 학습", Icon: BrainCircuit },
   { id: "arena", label: "AI Arena", Icon: Swords },
-  { id: "analysis", label: "학습 분석", Icon: ChartNoAxesCombined },
-];
+] as const;
+type Page = (typeof pages)[number]["id"];
 export default function App() {
-  const [page, setPage] = useState("home"),
+  const [page, setPage] = useState<Page>("home"),
     [collapsed, setCollapsed] = useState(() => read("nav", false)),
     [open, setOpen] = useState(false),
     [models, setModels] = useState<Model[]>(() => {
@@ -37,12 +32,24 @@ export default function App() {
       }
     }),
     [records, setRecords] = useState<RecordGame[]>(() => read("records", [])),
+    [legacyQ] = useState(() => read<{ q: QTable }>("training", { q: {} }).q),
+    [modelId, setModelId] = useState(() => read("active-model", "current")),
     [storageError, setStorageError] = useState("");
-  const t = useTraining();
+  const q = models.find((m) => m.id === modelId)?.q ?? legacyQ;
+  const modelSelection = {
+    models,
+    modelId: models.some((m) => m.id === modelId) ? modelId : "current",
+    onModelChange: setModelId,
+    onImport: (model: Model) => {
+      setModels((s) => [...s, model]);
+      setModelId(model.id);
+    },
+  };
   const menuRef = useRef<HTMLButtonElement>(null),
     navRef = useRef<HTMLElement>(null);
   const go = (p: string) => {
-    setPage(p);
+    if (!pages.some((item) => item.id === p)) return;
+    setPage(p as Page);
     setOpen(false);
   };
   const record = useCallback(
@@ -54,10 +61,13 @@ export default function App() {
       write("models", models);
       write("nav", collapsed);
       write("records", records);
+      write("active-model", modelId);
     } catch {
-      setStorageError("저장 공간이 부족합니다. 모델을 JSON으로 내보내 주세요.");
+      setStorageError(
+        "브라우저 저장 공간이 부족해 변경 사항을 저장하지 못했습니다.",
+      );
     }
-  }, [models, collapsed, records]);
+  }, [models, collapsed, records, modelId]);
   useEffect(() => {
     if (!open) return;
     const before = document.activeElement as HTMLElement;
@@ -118,7 +128,6 @@ export default function App() {
             <X size={18} />
           </button>
         </div>
-        <div className="nav-caption">WORKSPACE</div>
         <div className="nav-items">
           {pages.map(({ id, label, Icon }) => (
             <button
@@ -131,12 +140,12 @@ export default function App() {
             >
               <Icon size={19} />
               <span>{label}</span>
-              {id === "training" && t.running && <i className="activity" />}
             </button>
           ))}
         </div>
         <div className="nav-bottom">
           <a
+            aria-label="GitHub"
             href="https://github.com/oyueo-mm/TicTacToeAI"
             target="_blank"
             rel="noreferrer"
@@ -144,15 +153,11 @@ export default function App() {
             <span>GitHub</span>
             <ArrowUpRight size={15} />
           </a>
-          <div className="nav-version">
-            <span>
-              AI EXPERIMENT LAB
-              <br />
-              <small>v0.1.0</small>
-            </span>
+          <div className="nav-controls">
             <button
               className="icon-button"
               aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
+              aria-expanded={!collapsed}
               onClick={() => setCollapsed(!collapsed)}
             >
               {collapsed ? (
@@ -175,32 +180,21 @@ export default function App() {
           >
             <Menu size={20} />
           </button>
-          <div className="breadcrumb">
-            실험실 <span>/</span>{" "}
-            <strong>{pages.find((p) => p.id === page)?.label}</strong>
-          </div>
-          <div className="top-right">
-            <span className="tiny-dot" /> 브라우저에서 실행되는 AI
-            <span className="version">v0.1</span>
-          </div>
         </header>
         <main id="content">
           <div hidden={page !== "home"}>
             {page === "home" && <Home go={go} />}
           </div>
           <div hidden={page !== "play"}>
-            <Playroom q={t.q} onRecord={record} />
-          </div>
-          <div hidden={page !== "training"}>
-            <TrainingPage t={t} models={models} setModels={setModels} />
+            <Playroom
+              q={q}
+              onRecord={record}
+              records={records}
+              modelSelection={modelSelection}
+            />
           </div>
           <div hidden={page !== "arena"}>
-            <Arena q={t.q} onRecord={record} />
-          </div>
-          <div hidden={page !== "analysis"}>
-            {page === "analysis" && (
-              <Analysis t={t} models={models} records={records} />
-            )}
+            <Arena q={q} onRecord={record} modelSelection={modelSelection} />
           </div>
         </main>
         {storageError && (

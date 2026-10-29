@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { RotateCcw, Undo2, Pause, Play } from "lucide-react";
+import {
+  RotateCcw,
+  Undo2,
+  Pause,
+  Play,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+} from "lucide-react";
+import { ModelPicker, type ModelSelection } from "../components/ModelPicker";
 import {
   createGame,
   play,
@@ -85,9 +95,13 @@ export function SearchView({ data }: { data: Search | null }) {
 export function Playroom({
   q,
   onRecord,
+  records,
+  modelSelection,
 }: {
   q: QTable;
   onRecord: (r: RecordGame) => void;
+  records: RecordGame[];
+  modelSelection: ModelSelection;
 }) {
   const [initial] = useState(() =>
     read("match-settings", {
@@ -129,10 +143,41 @@ export function Playroom({
     [comparing, setComparing] = useState(false),
     [searches, setSearches] = useState<Search[]>([]),
     [cursor, setCursor] = useState<number | null>(null),
+    [archive, setArchive] = useState<RecordGame | null>(null),
+    [panels, setPanels] = useState(() =>
+      read("playroom-panels", { leftClosed: false, rightClosed: false }),
+    ),
     [error, setError] = useState("");
   const isAI =
     method === "ai-ai" || (method === "human-ai" && g.turn !== human);
   const recorded = useRef(Boolean(g.result));
+  const leftClose = useRef<HTMLButtonElement>(null),
+    leftOpen = useRef<HTMLButtonElement>(null),
+    rightClose = useRef<HTMLButtonElement>(null),
+    rightOpen = useRef<HTMLButtonElement>(null);
+  const togglePanel = (side: "left" | "right", closed: boolean) => {
+    setPanels((s) => ({ ...s, [`${side}Closed`]: closed }));
+    requestAnimationFrame(() => {
+      const ref =
+        side === "left"
+          ? closed
+            ? leftOpen
+            : leftClose
+          : closed
+            ? rightOpen
+            : rightClose;
+      ref.current?.focus({
+        preventScroll: !matchMedia("(max-width: 760px)").matches,
+      });
+    });
+  };
+  useEffect(() => {
+    try {
+      write("playroom-panels", panels);
+    } catch {
+      setError("패널 설정을 저장하지 못했습니다.");
+    }
+  }, [panels]);
   useEffect(() => {
     try {
       write("match-settings", {
@@ -208,122 +253,173 @@ export function Playroom({
     setComparison(null);
     setSearches([]);
     setCursor(null);
+    setArchive(null);
   };
+  const sourceMode = archive?.mode ?? g.mode,
+    sourceMoves = archive?.moves ?? g.history;
   const shown =
-    cursor === null ? g : replay(g.mode, g.history.slice(0, cursor));
+    cursor === null ? g : replay(sourceMode, sourceMoves.slice(0, cursor));
   return (
-    <div className="lab-layout">
-      <aside className="settings">
-        <Panel title="대국 설정">
-          <Select
-            label="게임 모드"
-            value={g.mode}
-            options={modeOptions}
-            onChange={(v) => {
-              reset(v as Mode);
-              if (!algorithms(v).includes(ai)) setAi("alphabeta");
-            }}
-          />
-          <Select
-            label="대국 방식"
-            value={method}
-            options={[
-              ["human-human", "사람 vs 사람"],
-              ["human-ai", "사람 vs AI"],
-              ["ai-ai", "AI vs AI"],
-            ]}
-            onChange={setMethod}
-          />
-          <Select
-            label="AI 알고리즘"
-            value={ai}
-            options={algorithms(g.mode).map((a) => [a, names[a]])}
-            onChange={(v) => setAi(v as Algorithm)}
-          />
-          {method === "human-ai" && (
+    <div
+      className={`lab-layout playroom ${panels.leftClosed ? "left-closed" : ""} ${panels.rightClosed ? "right-closed" : ""}`}
+    >
+      <div
+        id="playroom-settings"
+        className="playroom-panel left-panel"
+        aria-hidden={panels.leftClosed}
+        inert={panels.leftClosed}
+      >
+        <aside className="settings" aria-label="대국 설정 패널">
+          <button
+            ref={leftClose}
+            className="icon-button panel-collapse"
+            aria-label="왼쪽 패널 접기"
+            aria-expanded={!panels.leftClosed}
+            aria-controls="playroom-settings"
+            onClick={() => togglePanel("left", true)}
+          >
+            <PanelLeftClose size={17} />
+          </button>
+          <Panel title="대국 설정">
             <Select
-              label="나의 차례"
-              value={human}
-              options={[
-                ["X", "선공 · X"],
-                ["O", "후공 · O"],
-              ]}
+              label="게임 모드"
+              value={g.mode}
+              options={modeOptions}
               onChange={(v) => {
-                setHuman(v as Mark);
-                reset();
+                reset(v as Mode);
+                if (!algorithms(v).includes(ai)) setAi("alphabeta");
               }}
             />
-          )}
-          {g.mode === "ultimate" && ai === "mcts" && (
-            <NumberField
-              label="MCTS 반복 횟수"
-              value={budget}
-              onChange={setBudget}
-              min={10}
-              max={5000}
+            <Select
+              label="대국 방식"
+              value={method}
+              options={[
+                ["human-human", "사람 vs 사람"],
+                ["human-ai", "사람 vs AI"],
+                ["ai-ai", "AI vs AI"],
+              ]}
+              onChange={setMethod}
             />
-          )}
-          {g.mode === "ultimate" && ai === "alphabeta" && (
-            <NumberField
-              label="탐색 깊이 (제한 탐색)"
-              value={depth}
-              onChange={setDepth}
-              min={1}
-              max={4}
+            <Select
+              label="AI 알고리즘"
+              value={ai}
+              options={algorithms(g.mode).map((a) => [a, names[a]])}
+              onChange={(v) => setAi(v as Algorithm)}
             />
-          )}
-          <button className="wide" onClick={() => reset()}>
-            <RotateCcw size={15} /> 새 게임
-          </button>
-        </Panel>
-        <Panel title="플레이어">
-          <div className="player-row">
-            <b className="X">X</b>
-            <span>
-              {method === "ai-ai" || (method === "human-ai" && human === "O")
-                ? names[ai]
-                : "사람"}
-            </span>
-            <small>선공</small>
-          </div>
-          <div className="player-row">
-            <b className="O">O</b>
-            <span>
-              {method === "ai-ai" || (method === "human-ai" && human === "X")
-                ? names[ai]
-                : "사람"}
-            </span>
-            <small>후공</small>
-          </div>
-        </Panel>
-        {g.mode === "ultimate" && (
-          <Panel title="궁극 틱택토 규칙">
-            <p className="muted">
-              둔 칸의 번호가 상대의 다음 작은 판을 정합니다. 종료된 판이면
-              자유롭게 착수합니다. 작은 판 3개를 한 줄로 점령하면 승리합니다.
-            </p>
+            {ai === "q" && <ModelPicker {...modelSelection} />}
+            {method === "human-ai" && (
+              <Select
+                label="나의 차례"
+                value={human}
+                options={[
+                  ["X", "선공 · X"],
+                  ["O", "후공 · O"],
+                ]}
+                onChange={(v) => {
+                  setHuman(v as Mark);
+                  reset();
+                }}
+              />
+            )}
+            {g.mode === "ultimate" && ai === "mcts" && (
+              <NumberField
+                label="MCTS 반복 횟수"
+                value={budget}
+                onChange={setBudget}
+                min={10}
+                max={5000}
+              />
+            )}
+            {g.mode === "ultimate" && ai === "alphabeta" && (
+              <NumberField
+                label="탐색 깊이 (제한 탐색)"
+                value={depth}
+                onChange={setDepth}
+                min={1}
+                max={4}
+              />
+            )}
+            <button className="wide" onClick={() => reset()}>
+              <RotateCcw size={15} /> 새 게임
+            </button>
           </Panel>
-        )}
-      </aside>
+          <Panel title="플레이어">
+            <div className="player-row">
+              <b className="X">X</b>
+              <span>
+                {method === "ai-ai" || (method === "human-ai" && human === "O")
+                  ? names[ai]
+                  : "사람"}
+              </span>
+              <small>선공</small>
+            </div>
+            <div className="player-row">
+              <b className="O">O</b>
+              <span>
+                {method === "ai-ai" || (method === "human-ai" && human === "X")
+                  ? names[ai]
+                  : "사람"}
+              </span>
+              <small>후공</small>
+            </div>
+          </Panel>
+          {g.mode === "ultimate" && (
+            <Panel title="궁극 틱택토 규칙">
+              <p className="muted">
+                둔 칸의 번호가 상대의 다음 작은 판을 정합니다. 종료된 판이면
+                자유롭게 착수합니다. 작은 판 3개를 한 줄로 점령하면 승리합니다.
+              </p>
+            </Panel>
+          )}
+        </aside>
+      </div>
       <div className="game-stage">
         <div className="stage-heading">
-          <span>
-            {g.mode === "classic" ? "CLASSIC" : "ULTIMATE"}{" "}
-            <small> / {g.history.length}수</small>
-          </span>
-          <Status
-            text={
-              busy
-                ? ai === "mcts"
-                  ? `MCTS ${progress} / ${budget}회`
-                  : "AI 계산 중"
-                : g.result
-                  ? g.result === "draw"
-                    ? "무승부"
-                    : `${g.result} 승리`
-                  : `${g.turn}의 차례`
-            }
-          />
+          <div className="stage-heading-side">
+            {panels.leftClosed && (
+              <button
+                ref={leftOpen}
+                className="icon-button"
+                aria-label="왼쪽 패널 펼치기"
+                aria-expanded={false}
+                aria-controls="playroom-settings"
+                onClick={() => togglePanel("left", false)}
+              >
+                <PanelLeftOpen size={17} />
+              </button>
+            )}
+            <span>
+              {g.mode === "classic" ? "CLASSIC" : "ULTIMATE"}{" "}
+              <small> / {g.history.length}수</small>
+            </span>
+          </div>
+          <div className="stage-heading-side">
+            <Status
+              text={
+                busy
+                  ? ai === "mcts"
+                    ? `MCTS ${progress} / ${budget}회`
+                    : "AI 계산 중"
+                  : g.result
+                    ? g.result === "draw"
+                      ? "무승부"
+                      : `${g.result} 승리`
+                    : `${g.turn}의 차례`
+              }
+            />
+            {panels.rightClosed && (
+              <button
+                ref={rightOpen}
+                className="icon-button"
+                aria-label="오른쪽 패널 펼치기"
+                aria-expanded={false}
+                aria-controls="playroom-inspector"
+                onClick={() => togglePanel("right", false)}
+              >
+                <PanelRightOpen size={17} />
+              </button>
+            )}
+          </div>
         </div>
         <div className="board-wrap">
           <Board
@@ -389,89 +485,139 @@ export function Playroom({
         </div>
         {error && <p role="alert">{error}</p>}
       </div>
-      <aside className="inspector">
-        {analysisGame?.mode === "classic" &&
-          data &&
-          ["minimax", "alphabeta"].includes(data.algorithm) && (
-            <Panel title="가지치기 전후 비교">
-              <button
-                disabled={comparing}
-                onClick={async () => {
-                  setComparing(true);
-                  try {
-                    const plain = await compute<Search>({
-                      type: "search",
-                      game: analysisGame,
-                      algorithm: "minimax",
-                    });
-                    const pruned = await compute<Search>({
-                      type: "search",
-                      game: analysisGame,
-                      algorithm: "alphabeta",
-                    });
-                    setComparison({ plain, pruned });
-                  } catch (e) {
-                    setError(String(e));
-                  } finally {
-                    setComparing(false);
+      <div
+        id="playroom-inspector"
+        className="playroom-panel right-panel"
+        aria-hidden={panels.rightClosed}
+        inert={panels.rightClosed}
+      >
+        <aside className="inspector" aria-label="AI 판단 및 대국 기록 패널">
+          <button
+            ref={rightClose}
+            className="icon-button panel-collapse"
+            aria-label="오른쪽 패널 접기"
+            aria-expanded={!panels.rightClosed}
+            aria-controls="playroom-inspector"
+            onClick={() => togglePanel("right", true)}
+          >
+            <PanelRightClose size={17} />
+          </button>
+          {analysisGame?.mode === "classic" &&
+            data &&
+            ["minimax", "alphabeta"].includes(data.algorithm) && (
+              <Panel title="가지치기 전후 비교">
+                <button
+                  disabled={comparing}
+                  onClick={async () => {
+                    setComparing(true);
+                    try {
+                      const plain = await compute<Search>({
+                        type: "search",
+                        game: analysisGame,
+                        algorithm: "minimax",
+                      });
+                      const pruned = await compute<Search>({
+                        type: "search",
+                        game: analysisGame,
+                        algorithm: "alphabeta",
+                      });
+                      setComparison({ plain, pruned });
+                    } catch (e) {
+                      setError(String(e));
+                    } finally {
+                      setComparing(false);
+                    }
+                  }}
+                >
+                  {comparing ? "같은 상태 탐색 중…" : "동일한 판으로 비교"}
+                </button>
+                {comparison && (
+                  <dl className="metrics">
+                    <div>
+                      <dt>Minimax</dt>
+                      <dd>
+                        {comparison.plain.nodes.toLocaleString()} 노드 ·{" "}
+                        {comparison.plain.ms.toFixed(1)} ms
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Alpha-Beta</dt>
+                      <dd>
+                        {comparison.pruned.nodes.toLocaleString()} 노드 ·{" "}
+                        {comparison.pruned.ms.toFixed(1)} ms
+                      </dd>
+                    </div>
+                  </dl>
+                )}
+              </Panel>
+            )}
+          <SearchView
+            data={
+              cursor !== null
+                ? ((archive?.searches ?? searches).find(
+                    (s) => s.move === sourceMoves[cursor - 1],
+                  ) ?? null)
+                : data
+            }
+          />
+          <Panel title="대국 기록">
+            {records.length > 0 && (
+              <Select
+                label="저장된 대국"
+                value={archive ? String(records.indexOf(archive)) : "current"}
+                onChange={(v) => {
+                  if (v === "current") {
+                    setArchive(null);
+                    setCursor(null);
+                  } else {
+                    const r = records[Number(v)];
+                    setArchive(r);
+                    setCursor(r.moves.length);
                   }
                 }}
-              >
-                {comparing ? "같은 상태 탐색 중…" : "동일한 판으로 비교"}
-              </button>
-              {comparison && (
-                <dl className="metrics">
-                  <div>
-                    <dt>Minimax</dt>
-                    <dd>
-                      {comparison.plain.nodes.toLocaleString()} 노드 ·{" "}
-                      {comparison.plain.ms.toFixed(1)} ms
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Alpha-Beta</dt>
-                    <dd>
-                      {comparison.pruned.nodes.toLocaleString()} 노드 ·{" "}
-                      {comparison.pruned.ms.toFixed(1)} ms
-                    </dd>
-                  </div>
-                </dl>
-              )}
-            </Panel>
-          )}
-        <SearchView
-          data={
-            cursor !== null
-              ? (searches.find((s) => s.move === g.history[cursor - 1]) ?? null)
-              : data
-          }
-        />
-        <Panel title="대국 기록">
-          <div className="history">
-            <button
-              onClick={() => setCursor(null)}
-              className={cursor === null ? "selected" : ""}
-            >
-              현재 대국
-            </button>
-            {g.history.map((m, i) => (
+                options={[
+                  ["current", "현재 대국"],
+                  ...records.map(
+                    (r, i) =>
+                      [
+                        String(i),
+                        `${r.mode === "classic" ? "일반" : "궁극"} · ${r.result === "draw" ? "무승부" : `${r.result} 승리`} · ${i + 1}`,
+                      ] as [string, string],
+                  ),
+                ]}
+              />
+            )}
+            <div className="history">
               <button
-                key={i}
-                onClick={() => setCursor(i + 1)}
-                className={cursor === i + 1 ? "selected" : ""}
+                onClick={() => {
+                  setCursor(null);
+                  setArchive(null);
+                }}
+                className={cursor === null ? "selected" : ""}
               >
-                <span>
-                  {i + 1}. {i % 2 ? "O" : "X"}
-                </span>
-                <span>
-                  {g.mode === "ultimate" ? `${Math.floor(m / 9) + 1}판 · ` : ""}
-                  {(m % 9) + 1}번 칸
-                </span>
+                현재 대국
               </button>
-            ))}
-          </div>
-        </Panel>
-      </aside>
+              {sourceMoves.map((m, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCursor(i + 1)}
+                  className={cursor === i + 1 ? "selected" : ""}
+                >
+                  <span>
+                    {i + 1}. {i % 2 ? "O" : "X"}
+                  </span>
+                  <span>
+                    {sourceMode === "ultimate"
+                      ? `${Math.floor(m / 9) + 1}판 · `
+                      : ""}
+                    {(m % 9) + 1}번 칸
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Panel>
+        </aside>
+      </div>
     </div>
   );
 }
